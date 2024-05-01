@@ -6,7 +6,7 @@ default_params = {
     "text": "Python Developer",
     "area": 0,  # All of Russia
     "enable_snippets": False,
-    "items_on_page": 10,
+    "items_on_page": 20,
     "page": 0,
     "search_period": 0,
     "experience": "doesNotMatter",

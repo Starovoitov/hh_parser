@@ -24,6 +24,8 @@ from data import (
     months_dict,
 )
 
+logger = logging.getLogger("root")
+
 
 class HHParser:
     url = "https://hh.ru/search/vacancy"
@@ -124,23 +126,24 @@ class HHParser:
 
                 self.write_down_page(job_frame)
             except AttributeError:
-                logging.exception(f"Unusual rendering on page {self.current_page_number}, {job.text}")
+                logger.exception(f"Unusual rendering on page {self.current_page_number}, {job.text}")
                 continue
             except Exception as e:
                 raise UnknownError from e
 
     def write_down_page(self, data_frame: dict) -> None:
-        logging.debug({k: v for k, v in data_frame.items() if k != "description"})
+        logger.debug({k: v for k, v in data_frame.items() if k != "description"})
         values = [data_frame.get(key) for key in self._fieldnames]
 
         with open(self.dataset_loc, "a") as f:
             writer = csv.writer(f)
             writer.writerow(values)
 
-    @retry(UnknownError, tries=3, delay=10)
+    @retry(UnknownError, tries=5, delay=10)
     def turn_page(self) -> Response:
-        logging.debug(f"Current page: {self.current_page_number + 1}")
+        logger.debug(f"Current page: {self.current_page_number + 1}")
         self.params["page"] = self.current_page_number
+        self.headers["User-Agent"] = fake_user_agent.user_agent()
         response = requests.get(self.url, params=self.params, headers=self.headers, timeout=self.request_timeout)
         time.sleep(self.pause)
 
@@ -175,14 +178,14 @@ class HHParser:
 
     def do_parse(self, area_name: str = None) -> None:
         try:
-            logging.info(f"Start crawling, area - {area_name}")
+            logger.info(f"Start crawling, area - {area_name}")
             self.crawl_site()
         except EndOfCrawlError:
-            logging.info(f"No more page exist, total - {self.current_page_number - 1}")
+            logger.info(f"No more page exist, total - {self.current_page_number - 1}")
         except UnknownError as e:
-            logging.critical(f"Unknown error: {e}")
+            logger.critical(f"Unknown error: {e}")
         finally:
-            logging.info("The end of crawling")
+            logger.info("The end of crawling")
 
     @staticmethod
     def extract_salary_values(salary_string) -> Salary:
@@ -259,12 +262,11 @@ def main(args):
     for area in fields(SearchArea):
         search_params = args.search_params
         search_params["area"] = getattr(search_area, area.name)
-        headers = {"User-Agent": fake_user_agent.user_agent()}
         if search_params["area"] == 0:
             continue
         HHParser(
             search_params=search_params,
-            headers=headers,
+            headers=args.headers,
             max_pages_number=args.max_pages_number,
             pause=args.requests_pause,
             request_timeout=args.request_timeout,
@@ -282,10 +284,10 @@ if __name__ == "__main__":
     parser.add_argument("--headers", default=default_headers, help="http headers to be applied in requests")
     parser.add_argument("--logs", default="parsers.log", help="crawling logs")
     parser.add_argument(
-        "--requests_pause", default=0.5, help="pause in seconds between http requests to avoid blocking from hh side"
+        "--requests_pause", default=0.3, help="pause in seconds between http requests to avoid blocking from hh side"
     )
     parser.add_argument("--request_timeout", default=30, help="timeout of http request in seconds")
-    parser.add_argument("--max_pages_number", default=1000, help="max number of pages allowed to crawl if they exist")
+    parser.add_argument("--max_pages_number", default=200, help="max number of pages allowed to crawl if they exist")
     parser.add_argument("--dataset", default="dataset.csv", help="accumulated dataset path")
     parser.add_argument(
         "--overwrite_csv",
@@ -295,7 +297,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s",
-                        filename=args.logs, filemode='w')
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s",
+                        filename="log.log", filemode='w')
 
     main(args)
